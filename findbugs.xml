@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="ci.test.examples"default="findbugs"basedir=".">
+       <!--源代码目录-->
+       <propertyname="src.dir"location="src"/>
+       <!--存放class目录-->
+       <propertyname="classes.dir"location="classes"/>
+       <!--cobertura解压目录-->
+       <propertyname="cobertura.dir"location="../.."/>
+       <!--findbugs解压目录-->
+       <propertyname="findbugs.dir"location="../../../findbugs-2.0.2/"/>
+    <!--instrumented后生成文件的存放目录-->
+       <propertyname="instrumented.dir"location="instrumented"/>
+       <!--报告存放目录-->
+    <propertyname="reports.dir"location="reports"/>
+       <!--junit-xml测试结果存放目录-->
+       <propertyname="reports.xml.dir"location="${reports.dir}/junit-xml"/>
+    <!--junit-html测试报告存放目录-->
+       <property      name="reports.html.dir" location="${reports.dir}/junit-html"/>
+       <!--cobertura-html测试报告存放目录-->
+<propertyname="coverage.html.dir" location="${reports.dir}/cobertura-html"/>
+    <!--findbugs-html测试报告存放目录-->
+<propertyname="findbugs.html.dir" location="${reports.dir}/findbugs-html"/>
+<!--定义cobertura-classpath-->
+       <pathid="cobertura.classpath">
+             <filesetdir="${cobertura.dir}">
+                   <includename="cobertura*.jar"/>
+                   <includename="lib/**/*.jar"/>
+             </fileset>
+       </path>
+      <!--定义findbugs-classpath-->
+       <pathid="findbugs.classpath">
+             <filesetdir="${findbugs.dir}">
+                   <includename="**/*.jar"/>
+                   <includename="lib/findbugs-ant.jar"/>
+             </fileset>
+       </path>
+       <!--以tasks.properties文件信息创建task。(tasks.properties位于cobertura-2.0.3.jar中)-->
+       <taskdefclasspathref="cobertura.classpath"  resource="tasks.properties"/>
+       <!--创建目录-->
+       <targetname="init">
+            <mkdirdir="${classes.dir}"/>
+             <mkdirdir="${instrumented.dir}"/>
+             <mkdirdir="${reports.xml.dir}"/>
+             <mkdirdir="${reports.html.dir}"/>
+             <mkdirdir="${coverage.html.dir}"/>
+             <mkdirdir="${findbugs.html.dir}"/>
+       </target>
+       <targetname="compile"depends="init"><!--编译源文件-->
+             <javacsrcdir="${src.dir}"destdir="${classes.dir}"debug="on"
+                           source="1.6"includeantruntime="on">
+                   <classpathrefid="cobertura.classpath"/>
+             </javac>
+       </target>
+       <!--构建instrument class文件-->
+       <targetname="instrument"depends="init,compile">
+             <!--删除旧的"测试覆盖率"文件和旧的"instrumentation"测量文件.-->
+             <deletefile="cobertura.ser"/>
+             <deletedir="${instrumented.dir}"/>
+            <!--构建(Instrument)项目class文件，并将其构建后的文件写入${instrumented.dir}目录中-->
+             <cobertura-instrumenttodir="${instrumented.dir}">
+                   <!--忽略参照log4j的代码行-->
+                   <ignoreregex="org.apache.log4j.*"/>
+                     <filesetdir="${classes.dir}">
+                         <!--构建(Instrument)*.class文件但不构建*Test.class文件-->
+                         <includename="**/*.class"/>
+                         <excludename="**/*Test.class"/>
+                   </fileset>
+             </cobertura-instrument>
+       </target>
+      
+        <!-- 生成测试覆盖率报告(期间会进行JUnit测试) --> 
+       <targetname="test"depends="init,compile">
+             <!--
+                   printsummary表示是否打印基本信息,haltonerror表示测试出现错误是否中止,
+                  haltonfailure表示测试失败是否中止,fork必须启用,可设置为"on,true,yes"等
+             --> 
+              <junitdir="${basedir}"printsummary="on" haltonerror="off"haltonfailure="off"fork="on">
+                    <!--
+                             Note the classpath order: instrumented classes are before the
+                         original (uninstrumented) classes. This is important.
+                   -->
+                   <classpathlocation="${instrumented.dir}"/>
+                   <classpathlocation="${classes.dir}"/>
+                   <!--引用instrumented classes的依赖jar包-->
+                   <classpathrefid="cobertura.classpath"/>
+                   <!--
+                         同时运行多个测试用例,todir用来存放测试的输出结果,如果不指定<formatter/>是不会输出结果到todir中的                         -->
+                   <formattertype="plain"usefile="off"/>
+                   <formattertype="xml"/>
+                   <testname="${testcase}" todir="${reports.xml.dir}"if="testcase"/>
+                   <!--执行测试输出xml格式的测试结果-->
+                   <batchtesttodir="${reports.xml.dir}"unless="testcase">
+                         <filesetdir="${src.dir}">
+                               <includename="**/*Test.java"/>
+                         </fileset>
+                   </batchtest>
+             </junit>
+             <!--根据上面的测试结果生成html格式的测试报告-->
+             <junitreporttodir="${reports.xml.dir}">
+                   <filesetdir="${reports.xml.dir}">
+                         <includename="TEST-*.xml"/>
+                   </fileset>
+                   <reportformat="frames"todir="${reports.html.dir}"/>
+             </junitreport>
+       </target>
+<!--执行coverage-->
+       <targetname="coverage-check">
+             <cobertura-checkbranchrate="34"totallinerate="100"/>
+       </target>
+      <targetname="alternate-coverage-report">
+             <!--生成html格式的测试覆盖率报告-->
+             <cobertura-reportdestdir="${coverage.html.dir}">
+                   <filesetdir="${src.dir}">
+                         <includename="**/*.java"/>
+                   </fileset>
+             </cobertura-report>
+       </target>
+<targetname="coverage"depends="compile,instrument,test,alternate-coverage-report"/>
+<!--执行findbugs-->
+       <!-- 
+            taskdef作用是,创建与target名字相同的task,在task被调用时,相应的taskdef中的方法会被执行者
+        -->
+<taskdef name="findbugs"classpathref="findbugs.classpath"
+                                classname="edu.umd.cs.findbugs.anttask.FindBugsTask"/>
+<targetname="findbugs"depends="coverage">
+             <!--生成html格式的findbugs报告-->
+             <findbugshome="${findbugs.dir}"output="html"
+　　                    outputFile="${findbugs.html.dir}/findbugs.html">
+                   <auxClasspathrefid="findbugs.classpath"/>
+                   <sourcePathpath="${src.dir}"/>
+                   <classlocation="${classes.dir}"/>
+             </findbugs>                                                                              
+       </target>
+</project>
